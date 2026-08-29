@@ -5,41 +5,83 @@
 
 # Soenneker.Blazor.Drawflow.Dtos
 
-Represents a connection between nodes.
+Serializable .NET models for the JSON exported and imported by [Drawflow](https://github.com/jerosoler/Drawflow). The package can be used independently for persistence and transport; it is also referenced by `Soenneker.Blazor.Drawflow`.
 
-## Install
+## Installation
 
 ```bash
 dotnet add package Soenneker.Blazor.Drawflow.Dtos
 ```
 
-## What you get
+You do not need to install this package separately when your project already references `Soenneker.Blazor.Drawflow`.
 
-- `DrawflowConnection` — Represents a connection between nodes.
-- `DrawflowExport` — Represents the complete drawflow export structure containing all modules and their data.
-- `DrawflowModule` — Represents a module within the drawflow graph containing nodes.
-- `DrawflowNode` — Represents a node within a drawflow module with all its properties and connections.
-- `DrawflowNodeIO` — Represents input/output connections for a node.
+## Model shape
 
-## API at a glance
+```text
+DrawflowExport
+└── Drawflow: Dictionary<string, DrawflowModule>       // module name
+    └── Data: Dictionary<string, DrawflowNode>          // node ID
+        ├── Data: Dictionary<string, object>
+        ├── Inputs: Dictionary<string, DrawflowNodeIO>  // input_1, input_2, ...
+        └── Outputs: Dictionary<string, DrawflowNodeIO> // output_1, output_2, ...
+            └── Connections: List<DrawflowConnection>
+```
 
-| API | What it does | Result / important behavior |
-| --- | --- | --- |
-| `DrawflowConnection.Node` | The node ID this connection is connected to. | The node ID this connection is connected to. |
-| `DrawflowConnection.Input` | The input identifier (used for output connections). | The input identifier (used for output connections). |
-| `DrawflowConnection.Output` | The output identifier (used for input connections). | The output identifier (used for input connections). |
-| `DrawflowExport.Drawflow` | Dictionary of modules, where each module contains nodes and their data. | Dictionary of modules, where each module contains nodes and their data. |
-| `DrawflowModule.Data` | Dictionary of nodes within this module, keyed by node ID. | Dictionary of nodes within this module, keyed by node ID. |
-| `DrawflowNode.Id` | Unique identifier for the node. | Unique identifier for the node. |
-| `DrawflowNode.Name` | Name of the node. | Name of the node. |
-| `DrawflowNode.Data` | Custom data associated with the node. | Custom data associated with the node. |
-| `DrawflowNode.Class` | CSS class name for styling the node. | CSS class name for styling the node. |
-| `DrawflowNode.Html` | HTML content for the node display. | HTML content for the node display. |
-| `DrawflowNode.TypeNode` | Whether this is a type node (template node). | Whether this is a type node (template node). |
-| `DrawflowNode.Inputs` | Input connections for the node, keyed by input name. | Input connections for the node, keyed by input name. |
-| `DrawflowNode.Outputs` | Output connections for the node, keyed by output name. | Output connections for the node, keyed by output name. |
-| `DrawflowNode.PosX` | X position of the node on the canvas. | X position of the node on the canvas. |
-| `DrawflowNode.PosY` | Y position of the node on the canvas. | Y position of the node on the canvas. |
-| `DrawflowNode.AltPosX` | Alternative X position (used for some positioning calculations). | Alternative X position (used for some positioning calculations). |
-| `DrawflowNode.AltPosY` | Alternative Y position (used for some positioning calculations). | Alternative Y position (used for some positioning calculations). |
-| `DrawflowNodeIO.Connections` | List of connections for this input/output. | List of connections for this input/output. |
+Property names are mapped to Drawflow's JSON contract with `System.Text.Json` attributes, including `pos_x`, `pos_y`, and `typenode`.
+
+## Create and serialize a flow
+
+```csharp
+using System.Text.Json;
+using Soenneker.Blazor.Drawflow.Dtos;
+
+var export = new DrawflowExport
+{
+    Drawflow = new Dictionary<string, DrawflowModule>
+    {
+        ["Home"] = new()
+        {
+            Data = new Dictionary<string, DrawflowNode>
+            {
+                ["source-1"] = new()
+                {
+                    Id = "source-1",
+                    Name = "source",
+                    Class = "source-node",
+                    Html = "<strong>Orders</strong>",
+                    PosX = 80,
+                    PosY = 120,
+                    Data = new Dictionary<string, object>
+                    {
+                        ["endpoint"] = "/orders"
+                    },
+                    Inputs = new Dictionary<string, DrawflowNodeIO>(),
+                    Outputs = new Dictionary<string, DrawflowNodeIO>
+                    {
+                        ["output_1"] = new()
+                        {
+                            Connections = new List<DrawflowConnection>()
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+
+string json = JsonSerializer.Serialize(export);
+```
+
+Deserialize the same shape with:
+
+```csharp
+DrawflowExport? export = JsonSerializer.Deserialize<DrawflowExport>(json);
+```
+
+Values inside `DrawflowNode.Data` deserialize as `JsonElement` because the dictionary value type is `object`. Convert those values explicitly when reading persisted JSON.
+
+`DrawflowNode.Html` is rendered as HTML by Drawflow. If a flow can be supplied or edited by an untrusted user, sanitize or reject its HTML before giving it to an editor.
+
+## Connection fields
+
+For an output entry, `DrawflowConnection.Node` identifies the destination node and `Input` identifies its input port. For an input entry, `Node` identifies the source node and `Output` identifies its output port.
